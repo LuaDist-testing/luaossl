@@ -217,6 +217,38 @@ Install Lua 5.3 module.
 
 \section{Modules}
 
+\begin{Module}{openssl}
+
+Binds various global interfaces, including version and build information.
+
+\subsubsection[\fn{openssl[]}]{\fn{openssl[]}}
+
+Table of various compile-time constant values. See also \fn{openssl.version}.
+
+\begin{ctabular}{ c | p{12cm} }
+name & description \\\hline
+\small{\texttt{SSLEAY\_VERSION\_NUMBER}} & OpenSSL version as an integer. \\
+\small{\texttt{LIBRESSL\_VERSION\_NUMBER}} & LibreSSL version as an integer. \\
+\small{\texttt{NO\_[feature]}} & If defined, signals that this installation of OpenSSL was compiled without [feature]. \\
+\end{ctabular}
+
+
+\subsubsection[\fn{openssl.version}]{\fn{openssl.version($info$)}}
+
+Returns information about the run-time version of OpenSSL, as opposed to the compile-time version used to build the Lua module. If $info$ is not specified, returns the version number as an integer. Otherwise, $info$ may be one of the following constants.
+
+\begin{ctabular}{ c | p{12cm} }
+name & description \\\hline
+\small{\texttt{SSLEAY\_VERSION}} & OpenSSL version description as a string. \\
+\small{\texttt{SSLEAY\_CFLAGS}} & Description of compiler flags used to build OpenSSL as a string. \\
+\small{\texttt{SSLEAY\_BUILT\_ON}} & Compilation date description as a string. \\
+\small{\texttt{SSLEAY\_PLATFORM}} & Platform description as a string. \\
+\small{\texttt{SSLEAY\_DIR}} & OpenSSL installation directory description as a string. \\
+\end{ctabular}
+
+\end{Module}
+
+
 \begin{Module}{openssl.bignum}
 
 \module{openssl.bignum} binds OpenSSL's libcrypto bignum library. It supports all the standard arithmetic operations. Regular number operands in a mixed arithmetic expression are upgraded as-if \method{bignum.new} was used explicitly. The \fn{\_\_tostring} metamethod generates a decimal encoded represention.
@@ -355,14 +387,37 @@ Returns a key-value iterator over the alternative names. The key is one of ``ema
 
 Binds the X.509 extension OpenSSL object.
 
-\subsubsection[\fn{extension.new}]{\fn{extension.new($name$, $value$ [, $conf$])}}
+\subsubsection[\fn{extension.new}]{\fn{extension.new($name$, $value$ [, $data$])}}
 
-Returns a new X.509 extension. $name$, $value$, and $conf$ are [currently] plain text strings.
-$value$ and $conf$ should use \href{https://www.openssl.org/docs/apps/x509v3_config.html#ARBITRARY_EXTENSIONS}{OpenSSL's arbitrary extension format}.
+Returns a new X.509 extension. If $value$ is the string ``DER'' or ``critical,DER'', then $data$ is an ASN.1-encoded octet string. Otherwise, $name$ and $value$ are plain text strings in \href{https://www.openssl.org/docs/apps/x509v3_config.html#ARBITRARY_EXTENSIONS}{OpenSSL's arbitrary extension format}; and if specified, $data$ is an OpenSSL configuration string defining any referenced identifiers in $value$.
 
 \subsubsection[\fn{extension.interpose}]{\fn{extension.interpose($name$, $function$)}}
 
 Add or interpose an extension class method. Returns the previous method, if any.
+
+\subsubsection[\fn{extension:getID}]{\fn{extension:getID()}}
+
+Returns the ASN.1 OID as a plain text string.
+
+\subsubsection[\fn{extension:getName}]{\fn{extension:getName()}}
+
+Returns a more human-readable name as a plain text string in the following order of preference: OpenSSL's short name, OpenSSL's long name, ASN.1 OID.
+
+\subsubsection[\fn{extension:getShortName}]{\fn{extension:getShortName()}}
+
+Returns OpenSSL's short name as a plain text string if available.
+
+\subsubsection[\fn{extension:getLongName}]{\fn{extension:getLongName()}}
+
+Returns OpenSSL's long name as a plain text string if available.
+
+\subsubsection[\fn{extension:getData}]{\fn{extension:getData()}}
+
+Returns the extension value as an ASN.1-encoded octet string.
+
+\subsubsection[\fn{extension:getCritical}]{\fn{extension:getCritical()}}
+
+Returns the extension critical flag as a boolean.
 
 \end{Module}
 
@@ -473,7 +528,15 @@ Sets the basic constraints critical flag.
 
 \subsubsection[\fn{x509:addExtension}]{\fn{x509:addExtension($ext$)}}
 
-Adds \module{x509.extension} object to the certificate. 
+Adds a copy of the \module{x509.extension} object to the certificate. 
+
+\subsubsection[\fn{x509:getExtension}]{\fn{x509:getExtension($key$)}}
+
+Returns a copy of the \module{x509.extension} object identified by $key$ where $key$ is the plain text string of the OID, long name, or short name; or the integer index (1-based) of the extension. Returns nothing if no such extension was found by that name or at that index.
+
+\subsubsection[\fn{x509:getExtensionCount}]{\fn{x509:getExtensionCount()}}
+
+Returns the integer count of the number of extensions.
 
 \subsubsection[\fn{x509:isIssuedBy}]{\fn{x509:isIssuedBy($issuer$)}}
 
@@ -486,6 +549,10 @@ Returns the public key component as an \module{openssl.pkey} object.
 \subsubsection[\fn{x509:setPublicKey}]{\fn{x509:setPublicKey($key$)}}
 
 Sets the public key component referenced by the \module{openssl.pkey} object $key$.
+
+\subsubsection[\fn{x509:getPublicKeyDigest}]{\fn{x509:getPublicKeyDigest([$type$])}}
+
+Returns the digest of the public key as a binary string. $type$ is an optional string describing the digest type, and defaults to ``sha1''.
 
 \subsubsection[\fn{x509:sign}]{\fn{x509:sign($key$ [, $type$])}}
 
@@ -597,6 +664,18 @@ Sets the issuer distinguished name. $name$ should be an \module{x509.name} objec
 
 Add the certificate identified by $serial$ to the revocation list. $serial$ should be a \module{openssl.bignum} object, as returned by \fn{x509:getSerial}. $time$ is the revocation date as a Unix timestamp. If unspecified $time$ defaults to the current time.
 
+\subsubsection[\fn{crl:addExtension}]{\fn{crl:addExtension($ext$)}}
+
+Adds a copy of the \module{x509.extension} object to the revocation list. 
+
+\subsubsection[\fn{crl:getExtension}]{\fn{crl:getExtension($key$)}}
+
+Returns a copy of the \module{x509.extension} object identified by $key$ where $key$ is the plain text string of the OID, long name, or short name; or the integer index (1-based) of the extension. Returns nothing if no such extension was found by that name or at that index.
+
+\subsubsection[\fn{crl:getExtensionCount}]{\fn{crl:getExtensionCount()}}
+
+Returns the integer count of the number of extensions.
+
 \subsubsection[\fn{crl:sign}]{\fn{crl:sign($key$)}}
 
 Signs the instance CRL using the \module{openssl.pkey} $key$.
@@ -694,22 +773,25 @@ Returns a new context object. $protocol$ is an optional string identifier select
 \begin{ctabular}{ c | p{14cm} }
 \multicolumn{2}{c}{$protocol$ identifiers}\\\hline\hline
 name & \href{https://www.openssl.org/docs/ssl/SSL_CTX_new.html}{description} \\\hline
-TLS & Supports TLS 1.0 and above. Internally uses \fn{SSLv23\_method} and disables SSLv2 and 
+TLS & Supports TLS 1.0 \emph{and above}. Internally uses \fn{SSLv23\_method} and disables SSLv2 and 
 SSLv3 using \texttt{SSL\_OP\_NO\_SSLv2} and \texttt{SSL\_OP\_NO\_SSLv3}.\\
 
-SSL & Supports SSL 3.0 and above. Internally uses \fn{SSLv23\_method} and disables SSLv2 using \texttt{SSL\_OP\_NO\_SSLv2}.\\
+SSL & Supports SSL 3.0 \emph{and above}. Internally uses \fn{SSLv23\_method} and disables SSLv2 using \texttt{SSL\_OP\_NO\_SSLv2}.\\
 
 SSLv23 & A catchall for all versions of SSL/TLS supported by OpenSSL. Individual versions can be disabled using \method{context:setOptions}. Internally uses \fn{SSLv23\_method}.\\
 
-TLSv1\_2 & Supports \emph{only} TLS 1.2; \emph{not} anything lower \emph{or} higher. Internally uses \fn{TLSv1\_2\_method}.\\
+TLSv1\_2 & Supports \emph{only} TLS 1.2. Internally uses \fn{TLSv1\_2\_method}.\\
 
-TLSv1\_1 & Supports \emph{only} TLS 1.1; \emph{not} anything lower \emph{or} higher. Internally uses \fn{TLSv1\_1\_method}.\\
+TLSv1\_1 & Supports \emph{only} TLS 1.1. Internally uses \fn{TLSv1\_1\_method}.\\
 
-TLSv1 & Supports \emph{only} TLS 1.0; \emph{not} anything lower \emph{or} higher. Internally uses \fn{TLSv1\_method}.\\
+TLSv1 & Supports \emph{only} TLS 1.0. Internally uses \fn{TLSv1\_method}.\\
 
-SSLv3 & Supports \emph{only} SSL 3.0; \emph{not} anything lower \emph{or} higher. Internally uses \fn{SSLv3\_method}.\\
+SSLv3 & Supports \emph{only} SSL 3.0. Internally uses \fn{SSLv3\_method}.\\
 
-SSLv2 & Supports \emph{only} SSL 2.0; \emph{not} anything lower \emph{or} higher. Internally uses \fn{SSLv2\_method}.
+SSLv2 & Supports \emph{only} SSL 2.0. Internally uses \fn{SSLv2\_method}. \\
+DTLS & Supports DTLS 1.0 \emph{and above}. Internally uses \fn{DTLS\_method}. \\
+DTLSv1 & Supports \emph{only} DTLS 1.0. Internally uses \fn{DTLSv1\_method}. \\
+DTLSv1\_2 & Supports \emph{only} DTLS 1.2. Internally uses \fn{DTLSv1\_2\_method}.
 \end{ctabular}
 
 
