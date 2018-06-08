@@ -1,10 +1,10 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luaossl"
-version = "20151221-0"
+version = "20151221-1"
 -- LuaDist source
 source = {
-  tag = "20151221-0",
+  tag = "20151221-1",
   url = "git://github.com/LuaDist-testing/luaossl.git"
 }
 -- Original source
@@ -29,7 +29,7 @@ external_dependencies = {
 		library = "ssl";
 	};
 	CRYPTO = {
-		header = "openssl/hmac.h"; -- Picked one of the many header files
+		header = "openssl/crypto.h"; -- Picked one of the many header files
 		library = "crypto";
 	};
 }
@@ -39,9 +39,9 @@ build = {
 		["_openssl"] = {
 			sources = { "src/openssl.c"; };
 			libraries = {
-				"ssl"; "crypto";
+				"ssl";
+				"crypto";
 				"pthread";
-				"dl";
 				"m";
 			};
 			defines = {
@@ -76,5 +76,15 @@ build = {
 		["openssl.x509.extension"] = "src/openssl.x509.extension.lua";
 		["openssl.x509.name"] = "src/openssl.x509.name.lua";
 		["openssl.x509.store"] = "src/openssl.x509.store.lua";
-	}
+	};
+	platforms = {
+		-- Only linux needs to link with libdl
+		linux = {
+			modules = {
+				["_openssl"] = {
+					libraries = {nil,nil,nil,nil,"dl"};
+				};
+			};
+		};
+	};
 }
