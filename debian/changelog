@@ -1,3 +1,34 @@
+liblua-openssl (20150504-0) unstable; urgency=low
+
+  * Use lightuserdata as registry keys. C function hashes aren't stable
+    in LuaJIT.
+  * Add openssl.version as binding for SSLeay_version.
+  * Fix build on OpenBSD 5.6 libressl.
+
+ -- William Ahern <william@25thandClement.com>  Mon, 04 May 2015 17:49:08 -0700
+
+liblua-openssl (20150422-0) unstable; urgency=low
+
+  * Add support for ALPN server callback, SSL_CTX_set_alpn_select_cb.
+  * Fix X509_STORE double-free bug on older OpenSSL releases (< 1.0.2)
+    by implementing and using our own X509_STORE_free routine which properly
+    checks reference counts. Workaround adapted from Ruby OpenSSL bindings.
+  * Fix strerror_r usage on glibc.
+
+ -- William Ahern <william@25thandClement.com>  Wed, 22 Apr 2015 15:39:14 -0700
+
+liblua-openssl (20150304-0) unstable; urgency=low
+
+  * Merge ALPN support from quae@daurnimator.com.
+
+ -- William Ahern <william@25thandClement.com>  Wed, 04 Mar 2015 18:11:13 -0800
+
+liblua-openssl (20150225-0) unstable; urgency=low
+
+  * Add DES module to help implement NTLM authentication protocol.
+
+ -- William Ahern <william@25thandClement.com>  Wed, 25 Feb 2015 12:46:41 -0800
+
 liblua-openssl (20141028-0) unstable; urgency=low
 
   * Add ssl:getVersion and ssl:getClientVersion.

@@ -20,7 +20,7 @@ OS_$(d) = $(shell $(d)/../mk/vendor.os)
 CC_$(d) = $(shell env CC="$(CC) "$(d)/../mk/vendor.cc)
 LUAPATH_$(d) = $(shell env CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" $(<D)/../mk/lua.path -krxm3 -I$(DESTDIR)$(includedir) -I/usr/include -I/usr/local/include -P$(DESTDIR)$(bindir) -P$(bindir) -L$(DESTDIR)$(libdir) -L$(libdir) -v$(1) $(2))
 
-CPPFLAGS_$(d) = $(CPPFLAGS_$(abspath $(@D)/../..)) -DLUA_COMPAT_APIUNSIGNED
+CPPFLAGS_$(d) = $(CPPFLAGS_$(abspath $(@D)/../..)) -DLUA_COMPAT_APIINTCASTS
 CFLAGS_$(d) = $(CFLAGS_$(abspath $(@D)/../..))
 LDFLAGS_$(d) = $(LDFLAGS_$(abspath $(@D)/../..))
 SOFLAGS_$(d) = $(SOFLAGS_$(abspath $(@D)/../..))
@@ -104,7 +104,8 @@ MODS$(1)_$(d) = \
 	$$(DESTDIR)$(3)/openssl/digest.lua \
 	$$(DESTDIR)$(3)/openssl/hmac.lua \
 	$$(DESTDIR)$(3)/openssl/cipher.lua \
-	$$(DESTDIR)$(3)/openssl/rand.lua
+	$$(DESTDIR)$(3)/openssl/rand.lua \
+	$$(DESTDIR)$(3)/openssl/des.lua
 
 .SECONDARY: liblua$(1)-openssl-install openssl$(1)-install
 
@@ -122,8 +123,15 @@ $$(DESTDIR)$(3)/openssl/%.lua: $$(d)/openssl.%.lua
 	$$(MKDIR) -p $$(@D)
 	$$(CP) -p $$< $$@
 
-$$(DESTDIR)$(3)/openssl/pubkey.lua: $$(DESTDIR)$(3)/openssl/pkey.lua
-	cd $$(@D) && $(LN_S) -f $$(<F) $$(@F)
+# pubkey.lua used to be symbolic link to pkey.lua, but that caused packaging
+# headaches. Now it's a stub, but the cp -p in the inference rule will copy
+# to the target of the symbolic link, so we need a special install rule to
+# clean up the mess.
+$$(DESTDIR)$(3)/openssl/pubkey.lua: $$(d)/openssl.pubkey.lua
+	$$(LUAC$(1)_$(d)) -p $$<
+	$$(MKDIR) -p $$(@D)
+	$$(RM) -f $$@
+	$$(CP) -p $$< $$@
 
 $$(DESTDIR)$(3)/openssl/x509/%.lua: $$(d)/openssl.x509.%.lua
 	$$(LUAC$(1)_$(d)) -p $$<

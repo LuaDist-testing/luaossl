@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luaossl"
-version = "20141028-0"
+version = "20150504-0"
 -- LuaDist source
 source = {
-  tag = "20141028-0",
+  tag = "20150504-0",
   url = "git://github.com/LuaDist-testing/luaossl.git"
 }
 -- Original source
 -- source = {
--- 	url = "https://github.com/wahern/luaossl/archive/deb-20141028-0.zip";
--- 	dir = "luaossl-deb-20141028-0";
+-- 	url = "https://github.com/wahern/luaossl/archive/rel-20150504.zip";
+-- 	dir = "luaossl-rel-20150504";
 -- }
 description = {
 	summary = "Most comprehensive OpenSSL module in the Lua universe.";
@@ -21,7 +21,7 @@ supported_platforms = {
 	"unix";
 }
 dependencies = {
-	"lua";
+	"lua >= 5.1";
 }
 external_dependencies = {
 	OPENSSL = {
@@ -57,14 +57,15 @@ build = {
 		["openssl.hmac"] = "src/openssl.hmac.lua";
 		["openssl.pkcs12"] = "src/openssl.pkcs12.lua";
 		["openssl.pkey"] = "src/openssl.pkey.lua";
+		["openssl.pubkey"] = "src/openssl.pubkey.lua";
 		["openssl.rand"] = "src/openssl.rand.lua";
 		["openssl.ssl.context"] = "src/openssl.ssl.context.lua";
 		["openssl.ssl"] = "src/openssl.ssl.lua";
+		["openssl.x509"] = "src/openssl.x509.lua";
 		["openssl.x509.altname"] = "src/openssl.x509.altname.lua";
 		["openssl.x509.chain"] = "src/openssl.x509.chain.lua";
 		["openssl.x509.crl"] = "src/openssl.x509.crl.lua";
 		["openssl.x509.extension"] = "src/openssl.x509.extension.lua";
-		["openssl.x509"] = "src/openssl.x509.lua";
 		["openssl.x509.name"] = "src/openssl.x509.name.lua";
 		["openssl.x509.store"] = "src/openssl.x509.store.lua";
 	}
