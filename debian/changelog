@@ -1,0 +1,62 @@
+liblua-openssl (20141028-0) unstable; urgency=low
+
+  * Add ssl:getVersion and ssl:getClientVersion.
+  * Fix "TLS" and "SSL" method names for context.new. OpenSSL TLSv1_method()
+    literally only speaks 1.0, not 1.0 and above. "TLS" now uses
+    SSLv23_method and disables SSLv2 and SSLv3. "SSL" uses SSLv23_method and
+    disables SSLv2.
+
+ -- William Ahern <william@25thandClement.com>  Tue, 28 Oct 2014 21:03:23 -0700
+
+liblua-openssl (20140923-0) unstable; urgency=low
+
+  * Add more CRL support from Kaarle Ritvanen.
+  * Add prelimiary 5.3 support.
+  * Add SSL_CTX and SSL option support.
+  * Add ephemeral key support.
+  * Add Server Name Indication (SNI) support.
+  * Fix issue which prevented loading public and private keys together.
+  * Add bindings to opensslv.h and opensslconf.h.
+
+ -- William Ahern <william@25thandClement.com>  Tue, 23 Sep 2014 20:32:32 -0700
+
+liblua-openssl (20140718-0) unstable; urgency=low
+
+  * Add CRL spport from Kaarle Ritvanen.
+  * Add PKCS1 support from Kaarle Ritvanen.
+  * Add AIX platform support.
+  * Add rand.stir.
+
+ -- William Ahern <william@25thandClement.com>  Fri, 18 Jul 2014 22:44:31 -0700
+
+liblua-openssl (20140328-0) unstable; urgency=low
+
+  * Add DER input/output formats.
+  * Add GEN_DIRNAME alternative names.
+  * Change the return value of several methods from boolean true
+    to the method object, to allow easy call chaining in Lua.
+  * Fix rand.uniform to use lua_Unsigned when it's a 64-bit type (Lua 5.3).
+  * Rename openssl.pubkey to openssl.pkey.
+
+ -- William Ahern <william@25thandClement.com>  Fri, 28 Mar 2014 22:44:31 -0700
+
+liblua-openssl (20140322-0) unstable; urgency=low
+
+  * Add Lua 5.3 support.
+  * Add user guide.
+
+ -- William Ahern <william@25thandClement.com>  Sat, 22 Mar 2014 20:23:56 -0800
+
+liblua-openssl (20140131-0) unstable; urgency=low
+
+  * Add multi-threaded re-entrancy protection, including explicitly
+    synchronizing OpenSSL initialization because OpenSSL doesn't appear to
+    use its own locking callbacks from initialization routines.
+
+ -- William Ahern <william@25thandClement.com>  Fri, 31 Jan 2014 14:27:30 -0800
+
+liblua-openssl (20131209-1) unstable; urgency=low
+
+  * Initial release after splitting from cqueues project.
+
+ -- William Ahern <william@25thandClement.com>  Sun, 09 Dec 2013 21:17:33 -0800
