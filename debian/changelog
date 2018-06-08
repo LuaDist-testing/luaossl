@@ -1,3 +1,19 @@
+liblua-openssl (20151221-0) unstable; urgency=low
+
+  * Add :tohex and :todec methods to bignums, and make metamethods
+    accessible directly. (daurnimator)
+  * Add __idiv metamethod for Lua 5.3. (daurnimator)
+
+ -- William Ahern <william@25thandClement.com>  Mon, 21 Dec 2015 02:35:12 -0800
+
+liblua-openssl (20151218-0) unstable; urgency=low
+
+  * Add :tobin method to bignums. (daurnimator)
+  * Add :getParameters method to pkeys. (daurnimator)
+  * Fix build when SSLv3 support is not present.
+
+ -- William Ahern <william@25thandClement.com>  Fri, 18 Dec 2015 03:09:29 -0800
+
 liblua-openssl (20150727-0) unstable; urgency=low
 
   * More extension work from Kaarle Ritvanen.

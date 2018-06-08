@@ -314,7 +314,7 @@ static int badoption(lua_State *L, int index, const char *opt) {
 
 static int checkoption(lua_State *L, int index, const char *def, const char *const opts[]) {
 	const char *opt = (def)? luaL_optstring(L, index, def) : luaL_checkstring(L, index);
-	int i; 
+	int i;
 
 	for (i = 0; opts[i]; i++) {
 		if (strieq(opts[i], opt))
@@ -620,7 +620,7 @@ static void auxL_ref(lua_State *L, int index, auxref_t *ref) {
 	*ref = luaL_ref(L, LUA_REGISTRYINDEX);
 } /* auxL_ref() */
 
-static auxtype_t auxL_getref(lua_State *L, auxref_t ref) {
+NOTUSED static auxtype_t auxL_getref(lua_State *L, auxref_t ref) {
 	if (ref == LUA_NOREF || ref == LUA_REFNIL) {
 		lua_pushnil(L);
 	} else {
@@ -1208,6 +1208,7 @@ static void ex_newstate(lua_State *L) {
 	 * Instead, we'll install our own panic handlers.
 	 */
 #if defined LUA_RIDX_MAINTHREAD
+	(void)thr;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
 	state->L = lua_tothread(L, -1);
 	lua_pop(L, 1);
@@ -1558,6 +1559,16 @@ static BIGNUM *bn_push(lua_State *L) {
 } /* bn_push() */
 
 
+static BIGNUM *bn_dup(lua_State *L, const BIGNUM *src) {
+	BIGNUM **ud = prepsimple(L, BIGNUM_CLASS);
+
+	if (!(*ud = BN_dup(src)))
+		auxL_error(L, auxL_EOPENSSL, "bignum");
+
+	return *ud;
+} /* bn_dup() */
+
+
 #define checkbig_(a, b, c, ...) checkbig((a), (b), (c))
 #define checkbig(...) checkbig_(__VA_ARGS__, &(_Bool){ 0 }, 0)
 
@@ -1753,6 +1764,20 @@ static BN_CTX *getctx(lua_State *L) {
 } /* getctx() */
 
 
+static int bn_tobin(lua_State *L) {
+	BIGNUM *bn = checksimple(L, 1, BIGNUM_CLASS);
+	size_t len;
+	void *dst;
+
+	len = BN_num_bytes(bn);
+	dst = lua_newuserdata(L, len);
+	BN_bn2bin(bn, dst);
+	lua_pushlstring(L, dst, len);
+
+	return 1;
+} /* bn_tobin() */
+
+
 static int bn__add(lua_State *L) {
 	BIGNUM *r, *a, *b;
 
@@ -1789,16 +1814,16 @@ static int bn__mul(lua_State *L) {
 } /* bn__mul() */
 
 
-static int bn__div(lua_State *L) {
-	BIGNUM *r, *a, *b;
+static int bn__idiv(lua_State *L) {
+	BIGNUM *dv, *a, *b;
 
-	bn_prepops(L, &r, &a, &b, 0);
+	bn_prepops(L, &dv, &a, &b, 0);
 
-	if (!BN_div(r, NULL, a, b, getctx(L)))
-		return auxL_error(L, auxL_EOPENSSL, "bignum:__div");
+	if (!BN_div(dv, NULL, a, b, getctx(L)))
+		return auxL_error(L, auxL_EOPENSSL, "bignum:__idiv");
 
 	return 1;
-} /* bn__div() */
+} /* bn__idiv() */
 
 
 static int bn__mod(lua_State *L) {
@@ -1808,6 +1833,12 @@ static int bn__mod(lua_State *L) {
 
 	if (!BN_mod(r, a, b, getctx(L)))
 		return auxL_error(L, auxL_EOPENSSL, "bignum:__mod");
+
+	/* lua has different rounding behaviour for mod than C */
+	if (!BN_is_zero(r) && (BN_is_negative(a) ^ BN_is_negative(b))) {
+		if (!BN_add(r, r, b))
+			return auxL_error(L, auxL_EOPENSSL, "bignum:__mod");
+	}
 
 	return 1;
 } /* bn__mod() */
@@ -1823,6 +1854,36 @@ static int bn__pow(lua_State *L) {
 
 	return 1;
 } /* bn__pow() */
+
+
+static int bn__shl(lua_State *L) {
+	BIGNUM *r, *a;
+	int n;
+
+	a = checkbig(L, 1);
+	n = luaL_checkinteger(L, 2);
+	r = bn_push(L);
+
+	if (!BN_lshift(r, a, n))
+		return auxL_error(L, auxL_EOPENSSL, "bignum:__shl");
+
+	return 1;
+} /* bn__shl() */
+
+
+static int bn__shr(lua_State *L) {
+	BIGNUM *r, *a;
+	int n;
+
+	a = checkbig(L, 1);
+	n = luaL_checkinteger(L, 2);
+	r = bn_push(L);
+
+	if (!BN_rshift(r, a, n))
+		return auxL_error(L, auxL_EOPENSSL, "bignum:__shr");
+
+	return 1;
+} /* bn__shr() */
 
 
 static int bn__unm(lua_State *L) {
@@ -1878,36 +1939,97 @@ static int bn__gc(lua_State *L) {
 } /* bn__gc() */
 
 
-static int bn__tostring(lua_State *L) {
+static BIO *getbio(lua_State *);
+
+static int bn_todec(lua_State *L) {
 	BIGNUM *bn = checksimple(L, 1, BIGNUM_CLASS);
-	char *txt;
+	char *txt = NULL;
+	BIO *bio;
+	BUF_MEM *buf;
 
 	if (!(txt = BN_bn2dec(bn)))
-		return auxL_error(L, auxL_EOPENSSL, "bignum:__tostring");
+		goto sslerr;
 
-	lua_pushstring(L, txt);
+	/* use GC-visible BIO as temporary buffer */
+	bio = getbio(L);
+
+	if (BIO_puts(bio, txt) < 0)
+		goto sslerr;
+
+	OPENSSL_free(txt);
+	txt = NULL;
+
+	BIO_get_mem_ptr(bio, &buf);
+	lua_pushlstring(L, buf->data, buf->length);
 
 	return 1;
-} /* bn__tostring() */
+sslerr:
+	OPENSSL_free(txt);
+
+	return auxL_error(L, auxL_EOPENSSL, "bignum:todec");
+} /* bn_todec() */
+
+
+static int bn_tohex(lua_State *L) {
+	BIGNUM *bn = checksimple(L, 1, BIGNUM_CLASS);
+	char *txt = NULL;
+	BIO *bio;
+	BUF_MEM *buf;
+
+	if (!(txt = BN_bn2hex(bn)))
+		goto sslerr;
+
+	/* use GC-visible BIO as temporary buffer */
+	bio = getbio(L);
+
+	if (BIO_puts(bio, txt) < 0)
+		goto sslerr;
+
+	OPENSSL_free(txt);
+	txt = NULL;
+
+	BIO_get_mem_ptr(bio, &buf);
+	lua_pushlstring(L, buf->data, buf->length);
+
+	return 1;
+sslerr:
+	OPENSSL_free(txt);
+
+	return auxL_error(L, auxL_EOPENSSL, "bignum:tohex");
+} /* bn_tohex() */
 
 
 static const luaL_Reg bn_methods[] = {
-	{ NULL,  NULL },
+	{ "add",   &bn__add },
+	{ "sub",   &bn__sub },
+	{ "mul",   &bn__mul },
+	{ "idiv",  &bn__idiv },
+	{ "mod",   &bn__mod },
+	{ "pow",   &bn__pow },
+	{ "shl",   &bn__shl },
+	{ "shr",   &bn__shr },
+	{ "tobin", &bn_tobin },
+	{ "todec", &bn_todec },
+	{ "tohex", &bn_tohex },
+	{ NULL,    NULL },
 };
 
 static const luaL_Reg bn_metatable[] = {
 	{ "__add",      &bn__add },
 	{ "__sub",      &bn__sub },
 	{ "__mul",      &bn__mul },
-	{ "__div",      &bn__div },
+	{ "__div",      &bn__idiv },
+	{ "__idiv",     &bn__idiv },
 	{ "__mod",      &bn__mod },
 	{ "__pow",      &bn__pow },
 	{ "__unm",      &bn__unm },
+	{ "__shl",      &bn__shl },
+	{ "__shr",      &bn__shr },
 	{ "__eq",       &bn__eq },
 	{ "__lt",       &bn__lt },
 	{ "__le",       &bn__le },
 	{ "__gc",       &bn__gc },
-	{ "__tostring", &bn__tostring },
+	{ "__tostring", &bn_todec },
 	{ NULL,         NULL },
 };
 
@@ -2112,7 +2234,7 @@ creat:
 		}
 #endif
 		default:
-			return luaL_error(L, "%d: unknown EVP base type (%d)", EVP_PKEY_type(type), type);
+			return luaL_error(L, "%d: unsupported EVP_PKEY base type", EVP_PKEY_type(type));
 		} /* switch() */
 	} else if (lua_isstring(L, 1)) {
 		int type = optencoding(L, 2, "*", X509_ANY|X509_PEM|X509_DER);
@@ -2381,8 +2503,8 @@ static int pk_toPEM(lua_State *L) {
 
 			len = BIO_get_mem_data(bio, &pem);
 			lua_pushlstring(L, pem, len);
-
 			BIO_reset(bio);
+
 			break;
 		case 2: case 3: /* private, PrivateKey */
 			if (!PEM_write_bio_PrivateKey(bio, key, 0, 0, 0, 0, 0))
@@ -2390,6 +2512,7 @@ static int pk_toPEM(lua_State *L) {
 
 			len = BIO_get_mem_data(bio, &pem);
 			lua_pushlstring(L, pem, len);
+			BIO_reset(bio);
 
 			break;
 #if 0
@@ -2438,7 +2561,7 @@ static int pk_toPEM(lua_State *L) {
 			}
 #endif
 			default:
-				return luaL_error(L, "%d: unknown EVP base type", EVP_PKEY_type(key->type));
+				return luaL_error(L, "%d: unsupported EVP_PKEY base type", EVP_PKEY_type(key->type));
 			}
 
 			lua_pushlstring(L, pem, len);
@@ -2456,6 +2579,255 @@ static int pk_toPEM(lua_State *L) {
 
 	return lua_gettop(L) - top;
 } /* pk_toPEM() */
+
+
+enum pk_param  {
+#define PK_RSA_OPTLIST { "n", "e", "d", "p", "q", "dmp1", "dmq1", "iqmp", NULL }
+#define PK_RSA_OPTOFFSET PK_RSA_N
+	PK_RSA_N = 1,
+	PK_RSA_E,
+	PK_RSA_D,
+	PK_RSA_P,
+	PK_RSA_Q,
+	PK_RSA_DMP1,
+	PK_RSA_DMQ1,
+	PK_RSA_IQMP,
+
+#define PK_DSA_OPTLIST { "p", "q", "g", "pub_key", "priv_key", NULL }
+#define PK_DSA_OPTOFFSET PK_DSA_P
+	PK_DSA_P,
+	PK_DSA_Q,
+	PK_DSA_G,
+	PK_DSA_PUB_KEY,
+	PK_DSA_PRIV_KEY,
+
+#define PK_DH_OPTLIST { "p", "g", "pub_key", "priv_key", NULL }
+#define PK_DH_OPTOFFSET PK_DH_P
+	PK_DH_P,
+	PK_DH_G,
+	PK_DH_PUB_KEY,
+	PK_DH_PRIV_KEY,
+
+#define PK_EC_OPTLIST { "pub_key", "priv_key", NULL }
+#define PK_EC_OPTOFFSET PK_EC_PUB_KEY
+	PK_EC_PUB_KEY,
+	PK_EC_PRIV_KEY,
+}; /* enum pk_param */
+
+static const char *const pk_rsa_optlist[] = PK_RSA_OPTLIST;
+static const char *const pk_dsa_optlist[] = PK_DSA_OPTLIST;
+static const char *const pk_dh_optlist[] = PK_DH_OPTLIST;
+static const char *const pk_ec_optlist[] = PK_EC_OPTLIST;
+
+static int pk_checkparam(lua_State *L, int type, int index) {
+	switch (type) {
+	case EVP_PKEY_RSA:
+		return luaL_checkoption(L, index, NULL, pk_rsa_optlist) + PK_RSA_OPTOFFSET;
+	case EVP_PKEY_DSA:
+		return luaL_checkoption(L, index, NULL, pk_dsa_optlist) + PK_DSA_OPTOFFSET;
+	case EVP_PKEY_DH:
+		return luaL_checkoption(L, index, NULL, pk_dh_optlist) + PK_DH_OPTOFFSET;
+	case EVP_PKEY_EC:
+		return luaL_checkoption(L, index, NULL, pk_ec_optlist) + PK_EC_OPTOFFSET;
+	default:
+		return luaL_error(L, "%d: unsupported EVP_PKEY base type", type);
+	}
+} /* pk_checkparam() */
+
+static void pk_pushparam(lua_State *L, void *_key, enum pk_param which) {
+	union {
+		RSA *rsa;
+		DH *dh;
+		DSA *dsa;
+#ifndef OPENSSL_NO_EC
+		EC_KEY *ec;
+#endif
+	} key = { _key };
+
+	switch (which) {
+	case PK_RSA_N:
+		/* RSA public modulus n */
+		bn_dup(L, key.rsa->n);
+
+		break;
+	case PK_RSA_E:
+		/* RSA public exponent e */
+		bn_dup(L, key.rsa->e);
+
+		break;
+	case PK_RSA_D:
+		/* RSA secret exponent d */
+		bn_dup(L, key.rsa->d);
+
+		break;
+	case PK_RSA_P:
+		/* RSA secret prime p */
+		bn_dup(L, key.rsa->p);
+
+		break;
+	case PK_RSA_Q:
+		/* RSA secret prime q with p < q */
+		bn_dup(L, key.rsa->q);
+
+		break;
+	case PK_RSA_DMP1:
+		/* exponent1 */
+		bn_dup(L, key.rsa->dmp1);
+
+		break;
+	case PK_RSA_DMQ1:
+		/* exponent2 */
+		bn_dup(L, key.rsa->dmq1);
+
+		break;
+	case PK_RSA_IQMP:
+		/* coefficient */
+		bn_dup(L, key.rsa->iqmp);
+
+		break;
+	case PK_DSA_P:
+		bn_dup(L, key.dsa->p);
+
+		break;
+	case PK_DSA_Q:
+		bn_dup(L, key.dsa->q);
+
+		break;
+	case PK_DSA_G:
+		bn_dup(L, key.dsa->g);
+
+		break;
+	case PK_DSA_PUB_KEY:
+		bn_dup(L, key.dsa->pub_key);
+
+		break;
+	case PK_DSA_PRIV_KEY:
+		bn_dup(L, key.dsa->priv_key);
+
+		break;
+	case PK_DH_P:
+		bn_dup(L, key.dh->p);
+
+		break;
+	case PK_DH_G:
+		bn_dup(L, key.dh->g);
+
+		break;
+	case PK_DH_PUB_KEY:
+		bn_dup(L, key.dh->pub_key);
+
+		break;
+	case PK_DH_PRIV_KEY:
+		bn_dup(L, key.dh->priv_key);
+
+		break;
+#ifndef OPENSSL_NO_EC
+	case PK_EC_PUB_KEY: {
+		const EC_GROUP *group;
+		const EC_POINT *public_key;
+
+		if (!(group = EC_KEY_get0_group(key.ec)) || !(public_key = EC_KEY_get0_public_key(key.ec)))
+			goto sslerr;
+		bn_dup(L, EC_POINT_point2bn(group, public_key, EC_KEY_get_conv_form(key.ec), NULL, getctx(L)));
+
+		break;
+	}
+	case PK_EC_PRIV_KEY:
+		bn_dup(L, EC_KEY_get0_private_key(key.ec));
+
+		break;
+#endif
+	default:
+		luaL_error(L, "%d: invalid EVP_PKEY parameter", which);
+	}
+
+	return;
+sslerr:
+	auxL_error(L, auxL_EOPENSSL, "pkey:getParameters");
+
+	return;
+} /* pk_pushparam() */
+
+
+static int pk_getParameters(lua_State *L) {
+	EVP_PKEY *_key = checksimple(L, 1, PKEY_CLASS);
+	int type = EVP_PKEY_base_id(_key);
+	void *key;
+	int otop, index, tindex;
+
+	if (!(key = EVP_PKEY_get0(_key)))
+		goto sslerr;
+
+	if (lua_isnoneornil(L, 2)) {
+		const char *const *optlist;
+		const char *const *opt;
+
+		switch (type) {
+		case EVP_PKEY_RSA:
+			optlist = pk_rsa_optlist;
+			luaL_checkstack(L, countof(pk_rsa_optlist), "");
+
+			break;
+		case EVP_PKEY_DSA:
+			optlist = pk_dsa_optlist;
+			luaL_checkstack(L, countof(pk_dsa_optlist), "");
+
+			break;
+		case EVP_PKEY_DH:
+			optlist = pk_dh_optlist;
+			luaL_checkstack(L, countof(pk_dh_optlist), "");
+
+			break;
+		case EVP_PKEY_EC:
+			optlist = pk_ec_optlist;
+			luaL_checkstack(L, countof(pk_ec_optlist), "");
+
+			break;
+		default:
+			return luaL_error(L, "%d: unsupported EVP_PKEY base type", EVP_PKEY_base_id(key));
+		}
+
+		/*
+		 * Use special "{" parameter to tell loop to push table.
+		 * Subsequent parameters will be assigned as fields.
+		 *
+		 * NOTE: optlist arrays are NULL-terminated. luaL_checkstack()
+		 * calls above left room for "{".
+		 */
+		lua_pushstring(L, "{");
+
+		for (opt = optlist; *opt; opt++) {
+			lua_pushstring(L, *opt);
+		}
+	}
+
+	otop = lua_gettop(L);
+
+	/* provide space for results and working area */
+	luaL_checkstack(L, (otop - 1) + LUA_MINSTACK, "");
+
+	/* no table index, yet */
+	tindex = 0;
+
+	for (index = 2; index <= otop; index++) {
+		const char *opt = luaL_checkstring(L, index);
+
+		if (*opt == '{') {
+			lua_newtable(L);
+			tindex = lua_gettop(L);
+		} else {
+			pk_pushparam(L, key, pk_checkparam(L, type, index));
+
+			if (tindex) {
+				lua_setfield(L, tindex, opt);
+			}
+		}
+	}
+
+	return lua_gettop(L) - otop;
+sslerr:
+	return auxL_error(L, auxL_EOPENSSL, "pkey:getParameters");
+} /* pk_getParameters() */
 
 
 static int pk__tostring(lua_State *L) {
@@ -2503,6 +2875,7 @@ static const luaL_Reg pk_methods[] = {
 	{ "sign",          &pk_sign },
 	{ "verify",        &pk_verify },
 	{ "toPEM",         &pk_toPEM },
+	{ "getParameters", &pk_getParameters },
 	{ NULL,            NULL },
 };
 
@@ -2645,9 +3018,8 @@ static int xn__next(lua_State *L) {
 	X509_NAME *name = checksimple(L, lua_upvalueindex(1), X509_NAME_CLASS);
 	X509_NAME_ENTRY *entry;
 	ASN1_OBJECT *obj;
-	const char *id;
 	char txt[256];
-	int i, n, nid, len;
+	int i, n, len;
 
 	lua_settop(L, 0);
 
@@ -3530,7 +3902,7 @@ static double timeutc(ASN1_TIME *time) {
 
 		gmtoff *= sign;
 	}
-	
+
 	return tm2unix(&tm, gmtoff);
 badfmt:
 	return INFINITY;
@@ -5422,9 +5794,11 @@ static int sx_new(lua_State *L) {
 		method = (srv)? &SSLv2_server_method : &SSLv2_client_method;
 		break;
 #endif
+#ifndef OPENSSL_NO_SSL3
 	case 3: /* SSLv3 */
 		method = (srv)? &SSLv3_server_method : &SSLv3_client_method;
 		break;
+#endif
 	case 4: /* SSLv23 */
 		method = (srv)? &SSLv23_server_method : &SSLv23_client_method;
 		break;
@@ -6408,13 +6782,19 @@ static const EVP_CIPHER *cipher_checktype(lua_State *L, int index) {
 static int cipher_new(lua_State *L) {
 	const EVP_CIPHER *type;
 	EVP_CIPHER_CTX *ctx;
+	unsigned char key[EVP_MAX_KEY_LENGTH] = { 0 };
 
 	type = cipher_checktype(L, 1);
 
 	ctx = prepudata(L, sizeof *ctx, CIPHER_CLASS, NULL);
 	EVP_CIPHER_CTX_init(ctx);
 
-	if (!EVP_CipherInit_ex(ctx, type, NULL, NULL, NULL, -1))
+	/*
+	 * NOTE: For some ciphers like AES calling :update or :final without
+	 * setting a key causes a SEGV. Set a dummy key here. Same solution
+	 * as used by Ruby OSSL.
+	 */
+	if (!EVP_CipherInit_ex(ctx, type, NULL, key, NULL, -1))
 		return auxL_error(L, auxL_EOPENSSL, "cipher.new");
 
 	return 1;
@@ -6810,7 +7190,7 @@ static unsigned long long rand_llu(lua_State *L) {
  * The following algorithm for rand_uniform() is taken from OpenBSD's
  * arc4random_uniform, written by Otto Moerbeek, with subsequent
  * simplification by Jorden Verwer. Otto's source code comment reads
- * 
+ *
  *   Uniformity is achieved by generating new random numbers until the one
  *   returned is outside the range [0, 2**32 % upper_bound). This guarantees
  *   the selected random number will be inside [2**32 % upper_bound, 2**32)
@@ -6833,22 +7213,22 @@ static unsigned long long rand_llu(lua_State *L) {
  *   X-Complaints-To: ne...@news.purdue.edu
  *   NNTP-Posting-Date: Thu, 14 Nov 2002 16:20:37 +0000 (UTC)
  *   Xref: archiver1.google.com sci.crypt:78935
- *   
+ *
  *   In article <3DCD8D7...@nospam.com>,
  *   Michael Amling  <nos...@nospam.com> wrote:
  *   >Carlos Moreno wrote:
- *   
+ *
  *   I have already posted on this, but a repeat might be
  *   in order.
- *   
+ *
  *   If one can trust random bits, the most bitwise efficient
  *   manner to get a single random integer between 0 and N-1
  *   can be obtained as follows; the code can be made more
  *   computationally efficient.  I believe it is easier to
  *   understand with gotos.  I am assuming N>1.
- *   
+ *
  *   	i = 0;	j = 1;
- *   
+ *
  *   loop:	j=2*j; i=2*i+RANBIT;
  *   	if (j < N) goto loop;
  *   	if (i >= N) {
@@ -6856,14 +7236,14 @@ static unsigned long long rand_llu(lua_State *L) {
  *   		j = j - N;
  *   		goto loop:}
  *   	else return (i);
- *   
+ *
  *   The algorithm works because at each stage i is uniform
  *   between 0 and j-1.
- *   
+ *
  *   Another possibility is to generate k bits, where 2^k >= N.
  *   If 2^k = c*N + remainder, generate the appropriate value
  *   if a k-bit random number is less than c*N.
- *   
+ *
  *   For N = 17 (numbers just larger than powers of 2 are "bad"),
  *   the amount of information is about 4.09 bits, the best
  *   algorithm to generate one random number takes about 5.765
@@ -7041,7 +7421,7 @@ static int mt_init(void) {
 			int i;
 
 			mt_state.nlock = CRYPTO_num_locks();
-		
+
 			if (!(mt_state.lock = malloc(mt_state.nlock * sizeof *mt_state.lock))) {
 				error = errno;
 				goto epilog;
