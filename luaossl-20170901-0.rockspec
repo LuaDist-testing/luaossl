@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luaossl"
-version = "20161214-0"
+version = "20170901-0"
 -- LuaDist source
 source = {
-  tag = "20161214-0",
+  tag = "20170901-0",
   url = "git://github.com/LuaDist-testing/luaossl.git"
 }
 -- Original source
 -- source = {
--- 	url = "https://github.com/wahern/luaossl/archive/rel-20161214.zip";
--- 	md5 = "8c80c3d732713dbc7308d0ff97fc7678";
--- 	dir = "luaossl-rel-20161214";
+-- 	url = "https://github.com/wahern/luaossl/archive/rel-20170901.zip";
+-- 	md5 = "7bc1d1ca242d5f0153e0a6a9ac4255cd";
+-- 	dir = "luaossl-rel-20170901";
 -- }
 description = {
 	summary = "Most comprehensive OpenSSL module in the Lua universe.";
@@ -38,7 +38,10 @@ build = {
 	type = "builtin";
 	modules = {
 		["_openssl"] = {
-			sources = { "src/openssl.c"; };
+			sources = {
+				"src/openssl.c";
+				"vendor/compat53/c-api/compat-5.3.c";
+			};
 			libraries = {
 				"ssl";
 				"crypto";
@@ -48,7 +51,8 @@ build = {
 			defines = {
 				"_REENTRANT"; "_THREAD_SAFE";
 				"_GNU_SOURCE";
-				"LUA_COMPAT_APIINTCASTS";
+				"HAVE_CONFIG_H";
+				"COMPAT53_PREFIX=luaossl";
 			};
 			incdirs = {
 				"$(OPENSSL_INCDIR)";
@@ -66,6 +70,8 @@ build = {
 		["openssl.des"] = "src/openssl.des.lua";
 		["openssl.digest"] = "src/openssl.digest.lua";
 		["openssl.hmac"] = "src/openssl.hmac.lua";
+		["openssl.ocsp.basic"] = "src/openssl.ocsp.basic.lua";
+		["openssl.ocsp.response"] = "src/openssl.ocsp.response.lua";
 		["openssl.pkcs12"] = "src/openssl.pkcs12.lua";
 		["openssl.pkey"] = "src/openssl.pkey.lua";
 		["openssl.pubkey"] = "src/openssl.pubkey.lua";
@@ -92,4 +98,15 @@ build = {
 			};
 		};
 	};
+	patches = {
+		["config.h.diff"] = [[
+--- a/src/openssl.c
++++ b/src/openssl.c
+@@ -26,3 +26 @@
+-#if HAVE_CONFIG_H
+-#include "config.h"
+-#endif
++#include "../config.h.guess"
+]];
+	}
 }
