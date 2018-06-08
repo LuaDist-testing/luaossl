@@ -18,9 +18,9 @@ include $(d)/../GNUmakefile
 #
 OS_$(d) = $(shell $(d)/../mk/vendor.os)
 CC_$(d) = $(shell env CC="$(CC) "$(d)/../mk/vendor.cc)
-LUAPATH_$(d) = $(shell env CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" $(<D)/../mk/lua.path -krxm3 -I$(DESTDIR)$(includedir) -I/usr/include -I/usr/local/include -P$(DESTDIR)$(bindir) -P$(bindir) -L$(DESTDIR)$(libdir) -L$(libdir) -v$(1) $(2))
+LUAPATH_$(d) = $(shell env CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" $(<D)/../mk/luapath -krxm3 -I$(DESTDIR)$(includedir) -I/usr/include -I/usr/local/include -P$(DESTDIR)$(bindir) -P$(bindir) -L$(DESTDIR)$(libdir) -L$(libdir) -v$(1) $(2))
 
-CPPFLAGS_$(d) = $(CPPFLAGS_$(abspath $(@D)/../..)) -DLUA_COMPAT_APIINTCASTS
+CPPFLAGS_$(d) = $(CPPFLAGS_$(abspath $(@D)/../..)) -DLUA_COMPAT_APIINTCASTS -DHAVE_CONFIG_H
 CFLAGS_$(d) = $(CFLAGS_$(abspath $(@D)/../..))
 LDFLAGS_$(d) = $(LDFLAGS_$(abspath $(@D)/../..))
 SOFLAGS_$(d) = $(SOFLAGS_$(abspath $(@D)/../..))
@@ -41,6 +41,8 @@ endif
 #
 # C O M P I L A T I O N  R U L E S
 #
+$(d)/config.h: $(abspath $(d)/..)/config.h
+	$(CP) $< $@
 
 define BUILD_$(d)
 
@@ -49,7 +51,7 @@ define BUILD_$(d)
 $$(d)/$(1)/openssl.so: $$(d)/$(1)/openssl.o
 	$$(CC) -o $$@ $$^ $$(SOFLAGS_$$(abspath $$(@D)/..)) $$(SOFLAGS) $$(LDFLAGS_$$(abspath $$(@D)/..)) $$(LDFLAGS)
 
-$$(d)/$(1)/openssl.o: $$(d)/openssl.c $$(d)/compat52.h
+$$(d)/$(1)/openssl.o: $$(d)/openssl.c $$(d)/compat52.h $$(d)/config.h
 	test "$$(notdir $$(@D))" = "$$(call LUAPATH_$$(<D), $$(notdir $$(@D)), version)"
 	$$(MKDIR) -p $$(@D)
 	$$(CC) $$(CFLAGS_$$(<D)) $$(CFLAGS) $$(call LUAPATH_$$(<D), $$(notdir $$(@D)), cppflags) $$(CPPFLAGS_$$(<D)) $$(CPPFLAGS) -c -o $$@ $$<
@@ -88,6 +90,7 @@ LUAC$(1)_$(d) = $$(or $$(call LUAPATH_$(d), $(1), luac), true)
 MODS$(1)_$(d) = \
 	$$(DESTDIR)$(2)/_openssl.so \
 	$$(DESTDIR)$(3)/openssl.lua \
+	$$(DESTDIR)$(3)/openssl/auxlib.lua \
 	$$(DESTDIR)$(3)/openssl/bignum.lua \
 	$$(DESTDIR)$(3)/openssl/pkey.lua \
 	$$(DESTDIR)$(3)/openssl/pubkey.lua \
@@ -96,6 +99,7 @@ MODS$(1)_$(d) = \
 	$$(DESTDIR)$(3)/openssl/x509/altname.lua \
 	$$(DESTDIR)$(3)/openssl/x509/chain.lua \
 	$$(DESTDIR)$(3)/openssl/x509/crl.lua \
+	$$(DESTDIR)$(3)/openssl/x509/csr.lua \
 	$$(DESTDIR)$(3)/openssl/x509/extension.lua \
 	$$(DESTDIR)$(3)/openssl/x509/store.lua \
 	$$(DESTDIR)$(3)/openssl/pkcs12.lua \
