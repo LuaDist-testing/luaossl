@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luaossl"
-version = "20161209-0"
+version = "20161214-0"
 -- LuaDist source
 source = {
-  tag = "20161209-0",
+  tag = "20161214-0",
   url = "git://github.com/LuaDist-testing/luaossl.git"
 }
 -- Original source
 -- source = {
--- 	url = "https://github.com/wahern/luaossl/archive/rel-20161209.zip";
--- 	md5 = "0ef3f226a258e2c7ab8f9c7587543b70";
--- 	dir = "luaossl-rel-20161209";
+-- 	url = "https://github.com/wahern/luaossl/archive/rel-20161214.zip";
+-- 	md5 = "8c80c3d732713dbc7308d0ff97fc7678";
+-- 	dir = "luaossl-rel-20161214";
 -- }
 description = {
 	summary = "Most comprehensive OpenSSL module in the Lua universe.";
