@@ -1189,6 +1189,9 @@ static _Bool auxL_newclass(lua_State *L, const char *name, const auxL_Reg *metho
 	_Bool fresh = auxL_newmetatable(L, name, reset);
 	int n;
 
+	if (!reset && !fresh)
+		return fresh;
+
 	auxL_setfuncs(L, metamethods, 0);
 
 	if ((n = auxL_liblen(methods))) {
@@ -1495,7 +1498,7 @@ static EVP_CIPHER_CTX *compat_EVP_CIPHER_CTX_new(void) {
 #endif
 
 #if !HAVE_EVP_MD_CTX_NEW
-#define EVP_MD_CTX_new(md) EVP_MD_CTX_create()
+#define EVP_MD_CTX_new() EVP_MD_CTX_create()
 #endif
 
 #if !HAVE_EVP_PKEY_ID
@@ -3207,8 +3210,6 @@ static int pk_new(lua_State *L) {
 	/* #1 table or key; if key, #2 format and #3 type */
 	lua_settop(L, 3);
 
-	ud = prepsimple(L, PKEY_CLASS);
-
 	if (lua_istable(L, 1) || lua_isnil(L, 1)) {
 		int type = EVP_PKEY_RSA;
 		unsigned bits = 1024;
@@ -3222,7 +3223,7 @@ static int pk_new(lua_State *L) {
 		if (!lua_istable(L, 1))
 			goto creat;
 
-		if (loadfield(L, 1, "type", LUA_TSTRING, &id)) {
+		if (loadfield(L, 1, "type", LUA_TSTRING, (void*)&id)) {
 			static const struct { int nid; const char *sn; } types[] = {
 				{ EVP_PKEY_RSA, "RSA" },
 				{ EVP_PKEY_DSA, "DSA" },
@@ -3250,7 +3251,7 @@ static int pk_new(lua_State *L) {
 				bits = (unsigned)n;
 			}
 
-			if (!getfield(L, 1, "exp")) {
+			if (getfield(L, 1, "exp")) {
 				exp = checkbig(L, -1);
 			} else {
 				/* default to 65537 */
@@ -3262,7 +3263,7 @@ static int pk_new(lua_State *L) {
 		case EVP_PKEY_DH:
 			/* dhparam field can contain a PEM encoded string.
 			   The "dhparam" field takes precedence over "bits" */
-			if (loadfield(L, 1, "dhparam", LUA_TSTRING, &dhparam))
+			if (loadfield(L, 1, "dhparam", LUA_TSTRING, (void*)&dhparam))
 				break;
 
 			if (loadfield(L, 1, "bits", LUA_TNUMBER, &n)) {
@@ -3277,7 +3278,7 @@ static int pk_new(lua_State *L) {
 			}
 			break;
 		case EVP_PKEY_EC:
-			if (loadfield(L, 1, "curve", LUA_TSTRING, &id)) {
+			if (loadfield(L, 1, "curve", LUA_TSTRING, (void*)&id)) {
 				if (!auxS_txt2nid(&curve, id))
 					luaL_argerror(L, 1, lua_pushfstring(L, "%s: invalid curve", id));
 			}
@@ -3285,6 +3286,8 @@ static int pk_new(lua_State *L) {
 		}
 
 creat:
+		ud = prepsimple(L, PKEY_CLASS);
+
 		if (!(*ud = EVP_PKEY_new()))
 			return auxL_error(L, auxL_EOPENSSL, "pkey.new");
 
@@ -3424,6 +3427,8 @@ creat:
 		}
 
 		data = luaL_checklstring(L, 1, &len);
+
+		ud = prepsimple(L, PKEY_CLASS);
 
 		if (!(bio = BIO_new_mem_buf((void *)data, len)))
 			return auxL_error(L, auxL_EOPENSSL, "pkey.new");
@@ -5597,11 +5602,7 @@ static int xc_digest(lua_State *L) {
 		luaL_Buffer B;
 		unsigned i;
 
-#if LUA_VERSION_NUM < 502
-		luaL_buffinit(L, &B);
-#else
 		luaL_buffinitsize(L, &B, 2 * len);
-#endif
 
 		for (i = 0; i < len; i++) {
 			luaL_addchar(&B, x[0x0f & (md[i] >> 4)]);
@@ -8861,19 +8862,9 @@ static int ssl_getClientRandom(lua_State *L) {
 	unsigned char *out;
 
 	len = SSL_get_client_random(ssl, NULL, 0);
-#if LUA_VERSION_NUM < 502
-	if (LUAL_BUFFERSIZE < len)
-		luaL_error(L, "ssl:getClientRandom: LUAL_BUFFERSIZE(%d) < SSL_get_client_random(ssl, NULL, 0)", (int)LUAL_BUFFERSIZE, (int)len);
-	luaL_buffinit(L, &B);
-	out = (unsigned char*)luaL_prepbuffer(&B);
-	len = SSL_get_client_random(ssl, out, len);
-	luaL_addsize(&B, len);
-	luaL_pushresult(&B);
-#else
 	out = (unsigned char*)luaL_buffinitsize(L, &B, len);
 	len = SSL_get_client_random(ssl, out, len);
 	luaL_pushresultsize(&B, len);
-#endif
 
 	return 1;
 } /* ssl_getClientRandom() */
