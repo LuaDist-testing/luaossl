@@ -175,14 +175,6 @@
 #define HAVE_EVP_PKEY_ID OPENSSL_PREREQ(1,1,0)
 #endif
 
-#ifndef HAVE_GENERAL_NAME_GET0_VALUE
-#define HAVE_GENERAL_NAME_GET0_VALUE OPENSSL_PREREQ(1,1,0)
-#endif
-
-#ifndef HAVE_GENERAL_NAME_SET0_VALUE
-#define HAVE_GENERAL_NAME_SET0_VALUE OPENSSL_PREREQ(1,1,0)
-#endif
-
 #ifndef HAVE_HMAC_CTX_FREE
 #define HAVE_HMAC_CTX_FREE OPENSSL_PREREQ(1,1,0)
 #endif
@@ -780,8 +772,9 @@ NOTUSED static auxtype_t auxL_getref(lua_State *L, auxref_t ref) {
 static int auxL_testoption(lua_State *L, int index, const char *def, const char *const *optlist, _Bool nocase) {
 	const char *optname = (def)? luaL_optstring(L, index, def) : luaL_checkstring(L, index);
 	int (*optcmp)() = (nocase)? &strcasecmp : &strcmp;
+	int i;
 
-	for (int i = 0; optlist[i]; i++) {
+	for (i = 0; optlist[i]; i++) {
 		if (0 == optcmp(optlist[i], optname))
 			return i;
 	}
@@ -937,9 +930,11 @@ static inline size_t auxL_liblen(const auxL_Reg *l) {
 
 static void auxL_setfuncs(lua_State *L, const auxL_Reg *l, int nups) {
 	for (; l->name; l++) {
+		int i;
+
 		/* copy shared upvalues */
 		luaL_checkstack(L, nups, "too many upvalues");
-		for (int i = 0; i < nups; i++)
+		for (i = 0; i < nups; i++)
 			lua_pushvalue(L, -nups);
 
 		/* nil-fill local upvalues */
@@ -1379,68 +1374,6 @@ static void *compat_EVP_PKEY_get0(EVP_PKEY *key) {
 } /* compat_EVP_PKEY_get0() */
 #endif
 
-#if !HAVE_GENERAL_NAME_GET0_VALUE
-#define GENERAL_NAME_get0_value(...) \
-	compat_GENERAL_NAME_get0_value(__VA_ARGS__)
-
-static void *GENERAL_NAME_get0_value(GENERAL_NAME *name, int *type) {
-	if (type)
-		*type = name->type;
-	switch (name->type) {
-	case GEN_X400:
-	case GEN_EDIPARTY:
-		return name->d.other;
-	case GEN_OTHERNAME:
-		return name->d.otherName;
-	case GEN_EMAIL:
-	case GEN_DNS:
-	case GEN_URI:
-		return name->d.ia5;
-	case GEN_DIRNAME:
-		return name->d.dirn;
-	case GEN_IPADD:
-		return name->d.ip;
-	case GEN_RID:
-		return name->d.rid;
-	default:
-		return NULL;
-	}
-} /* compat_GENERAL_NAME_get0_value() */
-#endif
-
-#if !HAVE_GENERAL_NAME_SET0_VALUE
-#define GENERAL_NAME_set0_value(...) \
-	compat_GENERAL_NAME_set0_value(__VA_ARGS__)
-
-static void GENERAL_NAME_set0_value(GENERAL_NAME *name, int type, void *value) {
-	switch ((name->type = type)) {
-	case GEN_X400:
-	case GEN_EDIPARTY:
-		name->d.other = value;
-		break;
-	case GEN_OTHERNAME:
-		name->d.otherName = value;
-		break;
-	case GEN_EMAIL:
-	case GEN_DNS:
-	case GEN_URI:
-		name->d.ia5 = value;
-		break;
-	case GEN_DIRNAME:
-		name->d.dirn = value;
-		break;
-	case GEN_IPADD:
-		name->d.ip = value;
-		break;
-	case GEN_RID:
-		name->d.rid = value;
-		break;
-	default:
-		break;
-	}
-} /* compat_GENERAL_NAME_set0_value() */
-#endif
-
 #if !HAVE_HMAC_CTX_FREE
 #define HMAC_CTX_free(ctx) compat_HMAC_CTX_free((ctx))
 
@@ -1788,7 +1721,13 @@ static struct ex_type {
 	[EX_SSL_CTX_ALPN_SELECT_CB] = { CRYPTO_EX_INDEX_SSL_CTX, -1, &SSL_CTX_get_ex_data, &SSL_CTX_set_ex_data },
 };
 
-static int ex_ondup(CRYPTO_EX_DATA *to NOTUSED, CRYPTO_EX_DATA *from NOTUSED, void *from_d, int idx NOTUSED, long argl NOTUSED, void *argp NOTUSED) {
+#if OPENSSL_PREREQ(1,1,0)
+typedef const CRYPTO_EX_DATA const_CRYPTO_EX_DATA;
+#else
+typedef CRYPTO_EX_DATA const_CRYPTO_EX_DATA;
+#endif
+
+static int ex_ondup(CRYPTO_EX_DATA *to NOTUSED, const_CRYPTO_EX_DATA *from NOTUSED, void *from_d, int idx NOTUSED, long argl NOTUSED, void *argp NOTUSED) {
 	struct ex_data **data = from_d;
 
 	if (*data)
@@ -2491,7 +2430,7 @@ static BN_CTX *getctx(lua_State *L) {
 } /* getctx() */
 
 
-static int bn_tobin(lua_State *L) {
+static int bn_toBinary(lua_State *L) {
 	BIGNUM *bn = checksimple(L, 1, BIGNUM_CLASS);
 	size_t len;
 	void *dst;
@@ -2502,7 +2441,7 @@ static int bn_tobin(lua_State *L) {
 	lua_pushlstring(L, dst, len);
 
 	return 1;
-} /* bn_tobin() */
+} /* bn_toBinary() */
 
 
 static int bn__add(lua_State *L) {
@@ -2733,7 +2672,7 @@ static int bn_isPrime(lua_State *L) {
 
 static BIO *getbio(lua_State *);
 
-static int bn_todec(lua_State *L) {
+static int bn_toDecimal(lua_State *L) {
 	BIGNUM *bn = checksimple(L, 1, BIGNUM_CLASS);
 	char *txt = NULL;
 	BIO *bio;
@@ -2758,11 +2697,11 @@ static int bn_todec(lua_State *L) {
 sslerr:
 	OPENSSL_free(txt);
 
-	return auxL_error(L, auxL_EOPENSSL, "bignum:todec");
-} /* bn_todec() */
+	return auxL_error(L, auxL_EOPENSSL, "bignum:toDecimal");
+} /* bn_toDecimal() */
 
 
-static int bn_tohex(lua_State *L) {
+static int bn_toHex(lua_State *L) {
 	BIGNUM *bn = checksimple(L, 1, BIGNUM_CLASS);
 	char *txt = NULL;
 	BIO *bio;
@@ -2787,27 +2726,31 @@ static int bn_tohex(lua_State *L) {
 sslerr:
 	OPENSSL_free(txt);
 
-	return auxL_error(L, auxL_EOPENSSL, "bignum:tohex");
-} /* bn_tohex() */
+	return auxL_error(L, auxL_EOPENSSL, "bignum:toHex");
+} /* bn_toHex() */
 
 
 static const auxL_Reg bn_methods[] = {
-	{ "add",     &bn__add },
-	{ "sub",     &bn__sub },
-	{ "mul",     &bn__mul },
-	{ "sqr",     &bn_sqr },
-	{ "idiv",    &bn__idiv },
-	{ "mod",     &bn__mod },
-	{ "nnmod",   &bn_nnmod },
-	{ "exp",     &bn__pow },
-	{ "gcd",     &bn_gcd },
-	{ "lshift",  &bn__shl },
-	{ "rshift",  &bn__shr },
-	{ "isPrime", &bn_isPrime },
-	{ "tobin",   &bn_tobin },
-	{ "todec",   &bn_todec },
-	{ "tohex",   &bn_tohex },
-	{ NULL,      NULL },
+	{ "add",       &bn__add },
+	{ "sub",       &bn__sub },
+	{ "mul",       &bn__mul },
+	{ "sqr",       &bn_sqr },
+	{ "idiv",      &bn__idiv },
+	{ "mod",       &bn__mod },
+	{ "nnmod",     &bn_nnmod },
+	{ "exp",       &bn__pow },
+	{ "gcd",       &bn_gcd },
+	{ "lshift",    &bn__shl },
+	{ "rshift",    &bn__shr },
+	{ "isPrime",   &bn_isPrime },
+	{ "toBinary",  &bn_toBinary },
+	{ "toDecimal", &bn_toDecimal },
+	{ "toHex",     &bn_toHex },
+	/* deprecated */
+	{ "tobin",     &bn_toBinary },
+	{ "todec",     &bn_toDecimal },
+	{ "tohex",     &bn_toHex },
+	{ NULL,        NULL },
 };
 
 static const auxL_Reg bn_metatable[] = {
@@ -2825,7 +2768,7 @@ static const auxL_Reg bn_metatable[] = {
 	{ "__lt",       &bn__lt },
 	{ "__le",       &bn__le },
 	{ "__gc",       &bn__gc },
-	{ "__tostring", &bn_todec },
+	{ "__tostring", &bn_toDecimal },
 	{ NULL,         NULL },
 };
 
@@ -3801,13 +3744,15 @@ static int pk_getParameters(lua_State *L) {
 		return luaL_error(L, "%d: unsupported EVP_PKEY base type", base_type);
 
 	if (lua_isnoneornil(L, 2)) {
+		const char *const *optname;
+
 		/*
 		 * Use special "{" parameter to tell loop to push table.
 		 * Subsequent parameters will be assigned as fields.
 		 */
 		lua_pushstring(L, "{");
 		luaL_checkstack(L, nopts, "too many arguments");
-		for (const char *const *optname = optlist; *optname; optname++) {
+		for (optname = optlist; *optname; optname++) {
 			lua_pushstring(L, *optname);
 		}
 	}
@@ -3987,11 +3932,12 @@ static const auxL_Reg pk_globals[] = {
 };
 
 static void pk_luainit(lua_State *L, _Bool reset) {
+	char **k;
 	if (!auxL_newmetatable(L, PKEY_CLASS, reset))
 		return;
 	auxL_setfuncs(L, pk_metatable, 0);
 	auxL_newlib(L, pk_methods, 0);
-	for (char **k = (char *[]){ "__index", "__newindex", 0 }; *k; k++) {
+	for (k = (char *[]){ "__index", "__newindex", 0 }; *k; k++) {
 		lua_getfield(L, -2, *k); /* closure */
 		lua_pushvalue(L, -2);   /* method table */
 		lua_setupvalue(L, -2, 1);
@@ -4039,21 +3985,6 @@ static EC_GROUP *ecg_dup(lua_State *L, const EC_GROUP *src) {
 static EC_GROUP *ecg_dup_nil(lua_State *L, const EC_GROUP *src) {
 	return (src)? ecg_dup(L, src) : (lua_pushnil(L), (EC_GROUP *)0);
 } /* ecg_dup_nil() */
-
-static EC_GROUP *ecg_new_by_nid(int nid) {
-	EC_GROUP *group;
-
-	if (!(group = EC_GROUP_new_by_curve_name(nid)))
-		return NULL;
-
-	/* flag as named for benefit of __tostring */
-	EC_GROUP_set_asn1_flag(group, OPENSSL_EC_NAMED_CURVE);
-
-	/* compressed points may be patented */
-	EC_GROUP_set_point_conversion_form(group, POINT_CONVERSION_UNCOMPRESSED);
-
-	return group;
-} /* ecg_new_by_nid() */
 
 static EC_GROUP *ecg_push_by_nid(lua_State *L, int nid) {
 	EC_GROUP **group = prepsimple(L, EC_GROUP_CLASS);
