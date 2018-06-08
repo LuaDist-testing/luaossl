@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luaossl"
-version = "20161101-0"
+version = "20161208-0"
 -- LuaDist source
 source = {
-  tag = "20161101-0",
+  tag = "20161208-0",
   url = "git://github.com/LuaDist-testing/luaossl.git"
 }
 -- Original source
 -- source = {
--- 	url = "https://github.com/wahern/luaossl/archive/rel-20161101.zip";
--- 	dir = "luaossl-rel-20161101";
+-- 	url = "https://github.com/wahern/luaossl/archive/rel-20161208.zip";
+-- 	dir = "luaossl-rel-20161208";
 -- }
 description = {
 	summary = "Most comprehensive OpenSSL module in the Lua universe.";
@@ -79,6 +79,7 @@ build = {
 		["openssl.x509.extension"] = "src/openssl.x509.extension.lua";
 		["openssl.x509.name"] = "src/openssl.x509.name.lua";
 		["openssl.x509.store"] = "src/openssl.x509.store.lua";
+		["openssl.x509.verify_param"] = "src/openssl.x509.verify_param.lua";
 	};
 	platforms = {
 		-- Only linux needs to link with libdl
