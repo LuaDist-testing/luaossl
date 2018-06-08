@@ -1,10 +1,10 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luaossl"
-version = "20150727-0"
+version = "20150727-1"
 -- LuaDist source
 source = {
-  tag = "20150727-0",
+  tag = "20150727-1",
   url = "git://github.com/LuaDist-testing/luaossl.git"
 }
 -- Original source
@@ -48,6 +48,14 @@ build = {
 				"_REENTRANT"; "_THREAD_SAFE";
 				"_GNU_SOURCE";
 				"LUA_COMPAT_APIINTCASTS";
+			};
+			incdirs = {
+				"$(OPENSSL_INCDIR)";
+				"$(CRYPTO_INCDIR)";
+			};
+			libdirs = {
+				"$(OPENSSL_LIBDIR)";
+				"$(CRYPTO_LIBDIR)";
 			};
 		};
 		["openssl"] = "src/openssl.lua";
