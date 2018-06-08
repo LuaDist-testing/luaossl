@@ -1,10 +1,10 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luaossl"
-version = "20150504-0"
+version = "20150504-1"
 -- LuaDist source
 source = {
-  tag = "20150504-0",
+  tag = "20150504-1",
   url = "git://github.com/LuaDist-testing/luaossl.git"
 }
 -- Original source
@@ -47,7 +47,7 @@ build = {
 			defines = {
 				"_REENTRANT"; "_THREAD_SAFE";
 				"_GNU_SOURCE";
-				"LUA_COMPAT_APIUNSIGNED";
+				"LUA_COMPAT_APIINTCASTS";
 			};
 		};
 		["openssl"] = "src/openssl.lua";
